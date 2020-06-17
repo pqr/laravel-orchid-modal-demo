@@ -1,14 +1,16 @@
 <?php
 
-
 namespace App\Orchid\Screens\Contact;
 
-
 use App\Models\Contact;
+use App\Orchid\Layouts\Contact\ContactDescriptionRow;
+use Illuminate\Http\Request;
 use Orchid\Screen\Actions\Link;
+use Orchid\Screen\Actions\ModalToggle;
 use Orchid\Screen\Layout;
 use Orchid\Screen\Screen;
 use Orchid\Screen\TD;
+use Orchid\Support\Facades\Toast;
 
 class ContactListScreen extends Screen
 {
@@ -24,9 +26,10 @@ class ContactListScreen extends Screen
     public function commandBar(): array
     {
         return [
-            Link::make('Create New')
+            ModalToggle::make('Create Contact')
                 ->icon('icon-plus')
-                ->href(route('contacts.create')),
+                ->modal('create')
+                ->method('save'),
         ];
     }
 
@@ -38,19 +41,30 @@ class ContactListScreen extends Screen
     public function layout(): array
     {
         return [
+            Layout::table('contacts', [
+                TD::set('label', 'Name')
+                    ->cantHide()
+                    ->render(function (Contact $contact){
+                        return Link::make($contact->name)->route('contacts.edit', $contact->id);
+                    })
+            ]),
 
-            Layout::table(
-                'contacts',
-                [
-                    TD::set('label', 'Name')
-                        ->render(
-                            function ($model) {
-                                return Link::make($model->name)
-                                    ->route('contacts.edit', $model->id);
-                            }
-                        ),
-                ]
-            ),
+            Layout::modal('create', [ContactDescriptionRow::class])
+                ->title('Create new contact'),
         ];
+    }
+
+    /**
+     * @param Request $request
+     *
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function save(Request $request)
+    {
+        Contact::create($request->get('contact'));
+
+        Toast::info(__('Contact saved'));
+
+        return back();
     }
 }

@@ -26,7 +26,6 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::screen('contacts/{contact}/edit', ContactEditScreen::class)->name('contacts.edit');
-Route::screen('contacts/create', ContactEditScreen::class)->name('contacts.create');
 Route::screen('contacts', ContactListScreen::class)->name('contacts');
 
 // Main

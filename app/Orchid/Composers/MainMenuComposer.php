@@ -47,6 +47,7 @@ class MainMenuComposer
         $this->dashboard->menu
             ->add(Menu::MAIN,
                   ItemMenu::label('Contacts')
+                      ->title('Examples')
                       ->icon('icon-people')
                       ->route('contacts')
             );
