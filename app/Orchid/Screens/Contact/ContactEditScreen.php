@@ -6,6 +6,8 @@ namespace App\Orchid\Screens\Contact;
 
 use App\Models\Contact;
 use App\Models\Phone;
+use App\Orchid\Layouts\Contact\ContactDescriptionRow;
+use App\Orchid\Layouts\Contact\ContactPhoneTable;
 use Illuminate\Http\Request;
 use Orchid\Screen\Action;
 use Orchid\Screen\Actions\Button;
@@ -13,26 +15,25 @@ use Orchid\Screen\Actions\ModalToggle;
 use Orchid\Screen\Fields\Input;
 use Orchid\Screen\Layout;
 use Orchid\Screen\Screen;
-use Orchid\Screen\TD;
 use Orchid\Support\Facades\Toast;
 
 class ContactEditScreen extends Screen
 {
     public $name = 'Contact Edit';
-    public $exists = false;
 
+    /**
+     * @param Contact $concact
+     *
+     * @return Contact[]|array
+     */
     public function query(Contact $concact): array
     {
-        $this->exists = $concact->exists;
-        if ($this->exists) {
-            $this->name = 'Edit Model';
-        }
+        $this->name = 'Edit Model';
 
         $concact->load('phones');
 
         return [
             'contact' => $concact,
-            'phones' => $concact->phones,
         ];
     }
 
@@ -48,8 +49,7 @@ class ContactEditScreen extends Screen
                 ->icon('icon-plus')
                 ->modal('phoneModal')
                 ->modalTitle('Add New Phone To This Contact')
-                ->method('savePhone')
-                ->canSee($this->exists),
+                ->method('savePhone'),
 
             Button::make('Save')
                 ->icon('icon-check')
@@ -65,142 +65,67 @@ class ContactEditScreen extends Screen
     public function layout(): array
     {
         return [
-            Layout::rows(
-                [
-                    Input::make('contact.name')->title('Contact Name')->required(),
-                ]
-            ),
-            Layout::table(
-                'contact.phones',
-                [
-                    TD::set('description'),
-                    TD::set('number'),
-                    TD::set('actions')->render(
-                        static function (Phone $phone) {
-                            return
-                                ModalToggle::make('Edit Phone')
-                                    ->icon('icon-pencil')
-                                    ->modal('phoneModal')
-                                    ->modalTitle('Edit Phone')
-                                    ->method('savePhone')
-                                    /**
-                                     * Чтобы загрузить информацию о телефоне в методе asyncGetPhone
-                                     * туда нужно передать как минимум $phone->id
-                                     *
-                                     * Однако, поскольку мы уже находимся в route
-                                     * contacts/{contact}/edit/{method?}/{argument?}
-                                     * то асинхронный запрос будет отправлен именно на этот route
-                                     * и нам нужно предоставить обязательный параметр {contact}
-                                     *
-                                     * При нажатии Apply на этом модальном окне ожидаем, что будет
-                                     * отправлен ajax запрос на url:
-                                     *  /contacts/<id контакта>/savePhone?phoneId=1
-                                     *
-                                     * На деле запрос отправляется по адресу: /contacts/<id контакта>/edit?phoneId=1/savePhone
-                                     * что вызывает ошибку
-                                     *
-                                     * BadMethodCallException
-                                     * Method App\Orchid\Screens\Contact\ContactEditScreen::1 does not exist.
-                                     */
-                                    ->asyncParameters(
-                                        [
-                                            'contact' => $phone->contact_id,
-                                            'phoneId' => $phone->id,
-                                        ]
-                                    )
-                                .
-                                Button::make(__('Remove'))
-                                    ->method('removePhone')
-                                    ->confirm(
-                                        __('Are you sure you want to remove phone ' . $phone->description . '?')
-                                    )
-                                    ->parameters(
-                                        [
-                                            'phoneId' => $phone->id,
-                                        ]
-                                    )
-                                    ->icon('icon-trash');
-                        }
-                    ),
+            ContactDescriptionRow::class,
+            ContactPhoneTable::class,
 
-                ]
-            ),
-
-            Layout::modal(
-                'phoneModal',
-                [
-                    Layout::rows(
-                        [
-                            Input::make('phone.id')->hidden(),
-                            Input::make('phone.description')
-                                ->required()
-                                ->title('Description')
-                                ->placeholder('Work/Personal/Mobile/etc...'),
-                            Input::make('phone.number')
-                                ->required()
-                                ->title('Number'),
-                        ]
-                    ),
-                ],
-            )->async('asyncGetPhone'),
+            Layout::modal('phoneModal', [
+                Layout::rows([
+                    Input::make('phone.description')
+                        ->required()
+                        ->title('Description')
+                        ->placeholder('Work/Personal/Mobile/etc...'),
+                    Input::make('phone.number')
+                        ->required()
+                        ->title('Number'),
+                ]),
+            ])->async('asyncGetPhone'),
         ];
     }
 
     /**
-     * TODO: можно ли здесь как-то использовать model binding и получить Phone $phone в качестве параметра?
-     * Подозреваю что нет, т.к. phoneId не является route параметром
+     * @param Contact $contact
+     * @param Phone   $phone
      *
-     * @param Request $request
      * @return Phone[]|array
      */
-    public function asyncGetPhone(Request $request): array
+    public function asyncGetPhone(Contact $contact, Phone $phone): array
     {
-        $phoneId = $request->get('phoneId');
-        if ($phoneId) {
-            // Пытаемся загрузить имеющийся Phone для модального окна редактирования
-            $phone = Phone::findOrFail($phoneId);
-        } else {
-            // Это модальное окно создания нового телефона
-            $phone = new Phone();
-        }
-
         return [
             'phone' => $phone,
         ];
     }
 
+    /**
+     * @param Contact $contact
+     * @param Request $request
+     *
+     * @return \Illuminate\Http\RedirectResponse
+     */
     public function save(Contact $contact, Request $request)
     {
         $contact->fill($request->get('contact'))->save();
 
         Toast::info(__('Contact saved'));
 
-        return redirect()->route('contacts');
+        return back();
     }
 
     /**
-     * TODO: можно ли здесь как-то использовать model binding и получить Phone $phone в качестве параметра?
-     * Подозреваю что нет, т.к. phoneId не является route параметром
+     * @param Contact|null $contact
+     * @param Phone        $phone
+     * @param Request      $request
      *
-     * @param Request $request
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function savePhone(Contact $contact, Request $request)
+    public function savePhone(Contact $contact, Phone $phone, Request $request)
     {
-        $phoneData = $request->get('phone');
-        if (!empty($phoneData['id'])) {
-            // Сохраняем телефон из модального окна редактирования (т.е. этот телефон уже есть в базе и его нужно обвноить)
-            $phone = Phone::findOrFail($phoneData['id']);
-        } else {
-            // Это было модальное окно создания нового телефона
-            $phone = new Phone();
-            // Не забудем новый телефон сразу привязать к карточке контакта
-            $phone->contact_id = $contact->id;
-        }
-
-        // Заполняем данными пришедшими из формы из модального окна
-        $phone->fill($phoneData);
-        $phone->save();
+        $phone
+            ->findOrNew($request->get('phoneId'))
+            ->fill($request->get('phone'))
+            ->fill([
+                'contact_id' => $contact->id,
+            ])
+            ->save();
 
         Toast::info(__('Phone saved'));
 
@@ -212,12 +137,12 @@ class ContactEditScreen extends Screen
      * Подозреваю что нет, т.к. phoneId не является route параметром
      *
      * @param Request $request
+     *
      * @return \Illuminate\Http\RedirectResponse
      */
     public function removePhone(Request $request)
     {
-        $phoneId = $request->get('phoneId');
-        $phone = Phone::findOrFail($phoneId);
+        $phone = Phone::findOrFail($request->get('phoneId'));
         $phone->delete();
 
         Toast::info(__('Phone removed'));
